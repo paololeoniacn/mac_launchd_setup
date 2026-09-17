@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>launchd — automation dashboard</title>
+<style>
+  :root {
+    --bg:        #1C1C1E;
+    --surface:   #2C2C2E;
+    --border:    #3A3A3C;
+    --text:      #E5E5EA;
+    --muted:     #8E8E93;
+    --green:     #30D158;
+    --red:       #FF453A;
+    --yellow:    #FFD60A;
+    --blue:      #0A84FF;
+    --font:      "SF Mono", ui-monospace, "Cascadia Code", "Fira Code", monospace;
+    --radius:    6px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 13px;
+    line-height: 1.6;
+    min-height: 100vh;
+    padding: 32px 24px;
+  }
+
+  /* ── Header ─────────────────────────────── */
+  header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 16px;
+    margin-bottom: 28px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  header h1 {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--text);
+  }
+
+  header h1 span {
+    color: var(--green);
+  }
+
+  .meta {
+    color: var(--muted);
+    font-size: 11px;
+  }
+
+  /* ── Summary bar ─────────────────────────── */
+  .summary {
+    display: flex;
+    gap: 24px;
+    margin-bottom: 28px;
+  }
+
+  .stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .stat-value {
+    font-size: 26px;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .stat-label {
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: lowercase;
+  }
+
+  .stat.ok   .stat-value { color: var(--green); }
+  .stat.fail .stat-value { color: var(--red); }
+  .stat.idle .stat-value { color: var(--yellow); }
+  .stat.all  .stat-value { color: var(--text); }
+
+  /* ── Task list ───────────────────────────── */
+  .section-title {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: lowercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 10px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .task-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 32px;
+  }
+
+  .task {
+    display: grid;
+    grid-template-columns: 3px 1fr auto auto;
+    align-items: center;
+    gap: 0 14px;
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 12px 14px 12px 0;
+    border: 1px solid var(--border);
+    transition: border-color 0.15s;
+  }
+
+  .task:hover { border-color: #555; }
+
+  .task-stripe {
+    align-self: stretch;
+    border-radius: var(--radius) 0 0 var(--radius);
+    width: 3px;
+    min-height: 100%;
+  }
+
+  .task.ok   .task-stripe { background: var(--green); }
+  .task.fail .task-stripe { background: var(--red); }
+  .task.idle .task-stripe { background: var(--yellow); }
+  .task.unknown .task-stripe { background: var(--border); }
+
+  .task-info {}
+  .task-label {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .task-desc {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 400px;
+  }
+
+  .task-schedule {
+    font-size: 11px;
+    color: var(--muted);
+    white-space: nowrap;
+    text-align: right;
+  }
+
+  .badge {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 2px 7px;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+
+  .badge.ok      { background: rgba(48,209,88,.15);  color: var(--green); }
+  .badge.fail    { background: rgba(255,69,58,.15);  color: var(--red); }
+  .badge.idle    { background: rgba(255,214,10,.12); color: var(--yellow); }
+  .badge.unknown { background: rgba(142,142,147,.1); color: var(--muted); }
+
+  /* ── How-to panel ────────────────────────── */
+  .howto {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+  }
+
+  .howto h2 {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: lowercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 12px;
+  }
+
+  .cmd-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 24px;
+  }
+
+  @media (max-width: 600px) {
+    .cmd-grid { grid-template-columns: 1fr; }
+    .summary { gap: 16px; }
+  }
+
+  .cmd-item {}
+  .cmd-op {
+    font-size: 10.5px;
+    color: var(--muted);
+    margin-bottom: 2px;
+  }
+
+  .cmd-code {
+    color: var(--blue);
+    font-size: 11.5px;
+    word-break: break-all;
+  }
+
+  /* ── Footer ──────────────────────────────── */
+  footer {
+    margin-top: 36px;
+    color: var(--muted);
+    font-size: 10.5px;
+    display: flex;
+    justify-content: space-between;
+    border-top: 1px solid var(--border);
+    padding-top: 12px;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  /* ── Pulse (last-check) ──────────────────── */
+  @keyframes pulse {
+    0%   { opacity: 1; }
+    50%  { opacity: 0.4; }
+    100% { opacity: 1; }
+  }
+  .pulse { animation: pulse 1.2s ease 0s 2; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>launchd <span>//</span> automation dashboard</h1>
+  <div class="meta" id="last-check">caricamento…</div>
+</header>
+
+<div class="summary">
+  <div class="stat all"><span class="stat-value" id="s-total">—</span><span class="stat-label">totale</span></div>
+  <div class="stat ok"> <span class="stat-value" id="s-ok">—</span><span class="stat-label">attivi</span></div>
+  <div class="stat fail"><span class="stat-value" id="s-fail">—</span><span class="stat-label">errore</span></div>
+  <div class="stat idle"><span class="stat-value" id="s-idle">—</span><span class="stat-label">inattivi</span></div>
+</div>
+
+<div class="section-title">agents registrati</div>
+<div class="task-list" id="task-list"><!-- injected by JS --></div>
+
+<div class="howto">
+  <h2>comandi rapidi</h2>
+  <div class="cmd-grid">
+    <div class="cmd-item">
+      <div class="cmd-op">caricare un agent</div>
+      <div class="cmd-code">launchctl load ~/Library/LaunchAgents/&lt;label&gt;.plist</div>
+    </div>
+    <div class="cmd-item">
+      <div class="cmd-op">scaricare un agent</div>
+      <div class="cmd-code">launchctl unload ~/Library/LaunchAgents/&lt;label&gt;.plist</div>
+    </div>
+    <div class="cmd-item">
+      <div class="cmd-op">avviare manualmente</div>
+      <div class="cmd-code">launchctl start &lt;label&gt;</div>
+    </div>
+    <div class="cmd-item">
+      <div class="cmd-op">vedere stato di tutti</div>
+      <div class="cmd-code">launchctl list | grep local\.</div>
+    </div>
+    <div class="cmd-item">
+      <div class="cmd-op">log in tempo reale</div>
+      <div class="cmd-code">tail -f ~/Library/Logs/&lt;label&gt;.log</div>
+    </div>
+    <div class="cmd-item">
+      <div class="cmd-op">ultimo exit code</div>
+      <div class="cmd-code">launchctl list | grep &lt;label&gt;</div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <span>~/Library/LaunchAgents — aggiorna con <code style="color:var(--blue)">open dashboard.html</code></span>
+  <span id="hostname-info">macOS — Apple Silicon</span>
+</footer>
+
+<!-- Stato live generato da scripts/refresh-dashboard.sh (definisce window.TASKS) -->
+<script src="dashboard-data.js"></script>
+<script>
+// ── Task definitions ────────────────────────────────────────────────────────
+// Se dashboard-data.js è presente, window.TASKS ha lo stato reale di launchd.
+// L'array qui sotto è solo un fallback quando il file generato non esiste.
+//
+// status: "ok" | "fail" | "idle" | "unknown"
+//   ok      → plist caricato, ultima run exit 0
+//   fail    → ultima run exit code ≠ 0
+//   idle    → plist caricato ma non ancora eseguito
+//   unknown → plist non trovato / non caricato
+//
+const TASKS = window.TASKS ?? [
+  {
+    label:    "local.brew.update",
+    desc:     "brew update && brew upgrade",
+    schedule: "ogni giorno 12:00",
+    status:   "ok",
+    lastRun:  "oggi 12:00",
+    exitCode: 0,
+    plist:    "local.brew.update.plist",
+  },
+  // ── Aggiungi altri task qui ──────────────────────────────────────────────
+  // {
+  //   label:    "local.git.fetch",
+  //   desc:     "fetch di tutti i repo in ~/dev",
+  //   schedule: "ogni ora",
+  //   status:   "idle",
+  //   lastRun:  "mai",
+  //   exitCode: null,
+  //   plist:    "local.git.fetch.plist",
+  // },
+];
+
+// ── Render ──────────────────────────────────────────────────────────────────
+function badgeLabel(status) {
+  return { ok: "● attivo", fail: "✕ errore", idle: "○ inattivo", unknown: "? sconosciuto" }[status] ?? status;
+}
+
+function renderTasks(tasks) {
+  const container = document.getElementById("task-list");
+  if (!tasks.length) {
+    container.innerHTML = `<div style="color:var(--muted);padding:12px 0">Nessun task definito — aggiorna TASKS in dashboard.html</div>`;
+    return;
+  }
+
+  container.innerHTML = tasks.map(t => `
+    <div class="task ${t.status}">
+      <div class="task-stripe"></div>
+      <div class="task-info">
+        <div class="task-label">${t.label}</div>
+        <div class="task-desc">${t.desc}${t.exitCode != null ? ` &nbsp;·&nbsp; exit ${t.exitCode}` : ""}</div>
+      </div>
+      <div class="task-schedule">${t.schedule}<br><span style="color:var(--muted)">${t.lastRun}</span></div>
+      <div><span class="badge ${t.status}">${badgeLabel(t.status)}</span></div>
+    </div>
+  `).join("");
+}
+
+function updateSummary(tasks) {
+  document.getElementById("s-total").textContent = tasks.length;
+  document.getElementById("s-ok").textContent    = tasks.filter(t => t.status === "ok").length;
+  document.getElementById("s-fail").textContent  = tasks.filter(t => t.status === "fail").length;
+  document.getElementById("s-idle").textContent  = tasks.filter(t => t.status === "idle").length;
+}
+
+function updateMeta() {
+  const el = document.getElementById("last-check");
+  const now = new Date().toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  el.textContent = `aggiornato alle ${now}`;
+  el.classList.remove("pulse");
+  void el.offsetWidth; // reflow to restart animation
+  el.classList.add("pulse");
+}
+
+// ── Bootstrap ───────────────────────────────────────────────────────────────
+renderTasks(TASKS);
+updateSummary(TASKS);
+updateMeta();
+</script>
+</body>
+</html>
